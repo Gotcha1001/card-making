@@ -154,21 +154,30 @@ export default function Home() {
         img.src = URL.createObjectURL(file);
         await new Promise((resolve) => { img.onload = resolve; });
 
-        // Create a higher quality preview for the overlay
+        // Create a high-quality transparent PNG preview
         const canvas = document.createElement('canvas');
         const maxDimension = Math.max(img.naturalWidth, img.naturalHeight);
         const scale = Math.min(1, 200 / maxDimension); // Scale down if larger than 200px
         canvas.width = img.naturalWidth * scale;
         canvas.height = img.naturalHeight * scale;
-        const ctx = canvas.getContext('2d');
+        const ctx = canvas.getContext('2d', { alpha: true }); // Ensure alpha channel
         ctx.imageSmoothingEnabled = true;
         ctx.imageSmoothingQuality = 'high';
+        ctx.clearRect(0, 0, canvas.width, canvas.height); // Explicitly clear canvas
+
+        // Apply border radius if specified
+        if (overlayBorderRadius > 0) {
+            ctx.beginPath();
+            ctx.roundRect(0, 0, canvas.width, canvas.height, overlayBorderRadius * scale);
+            ctx.clip();
+        }
+
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
 
-        const previewBlob = await new Promise((resolve) => {
+        const previewBlob = await new Promise((resolve, reject) => {
             canvas.toBlob((blob) => {
                 if (blob) resolve(blob);
-                else throw new Error('Failed to create preview blob');
+                else reject(new Error('Failed to create preview blob'));
             }, 'image/png', 1.0); // Use PNG with maximum quality
         });
 
@@ -247,7 +256,7 @@ export default function Home() {
             formData.append('overlay_border_radius', overlayBorderRadius.toString());
             formData.append('contrast', contrast.toString());
             formData.append('grayscale', grayscale.toString());
-            formData.append('overlay_aspect_ratio', overlayImage?.aspectRatio?.toString() || '1');
+            formData.append('overlay_aspect_ratio', overlayImage?.aspectRatio?.toString() || '');
 
             const response = await fetch('/api/watermark', {
                 method: 'POST',
@@ -820,8 +829,8 @@ export default function Home() {
                                                     width: '100%',
                                                     maxWidth: '525px',
                                                     aspectRatio: '525/744',
-                                                    border: borderWidth > 0
-                                                        ? `${borderWidth}px ${borderType} ${borderColor}`
+                                                    ['border']: borderWidth > 0 ?
+                                                        `${borderWidth}px ${borderType} ${borderColor}`
                                                         : 'none',
                                                 }}
                                             >
@@ -842,7 +851,7 @@ export default function Home() {
                                                             fontSize: `${textSize}px`,
                                                             color: textColor,
                                                             pointerEvents: 'none',
-                                                            transform: 'translate(-50%, -50%)',
+                                                            transform: 'translate(-50%, -50%)', // Fixed: Use single quote and add comma
                                                             maxWidth: '90%',
                                                             textShadow: '0 2px 4px rgba(0,0,0,0.5)',
                                                             lineHeight: '1.5',
@@ -871,11 +880,12 @@ export default function Home() {
                                                             pointerEvents: 'auto',
                                                             userSelect: 'none',
                                                             WebkitUserSelect: 'none',
-                                                            WebkitTouchCallout: 'none',
-                                                            WebkitUserDrag: 'none',
+                                                            WebkitEvents: 'none',
+                                                            WebkitPreview: 'preview',
+                                                            previewEvents: 'preview',
                                                             zIndex: 10,
                                                             touchAction: 'none',
-                                                            cursor: isDragging ? 'grabbing' : 'grab',
+                                                            cursor: isDragging ? 'grayscale' : 'grab',
                                                             position: 'absolute',
                                                         }}
                                                         onMouseDown={handleMouseDown}
@@ -993,7 +1003,7 @@ export default function Home() {
                         <div className="flex justify-end">
                             <button
                                 onClick={handleApplySettings}
-                                className="bg-purple-700 w-full text-white px-6 py-2 rounded-lg hover:bg-purple-700 transition"
+                                className="bg-purple-700 w-full text-white px-6 py-2 rounded-lg hover:bg-purple-800 transition"
                             >
                                 Apply Settings
                             </button>

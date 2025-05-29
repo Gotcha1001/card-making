@@ -366,6 +366,7 @@ export default function Preview() {
             </header>
             <main className="container mx-auto px-4 py-6">
                 <div className="flex flex-col md:flex-row gap-2 justify-center max-w-[1200px] mx-auto">
+
                     {/* Image Container */}
                     <div className="w-full md:w-1/2">
                         <div
@@ -458,29 +459,40 @@ export default function Preview() {
                 </div>
 
                 <div className="mt-6 max-w-[525px] mx-auto">
-                    <div className="mt-4 flex flex-col sm:flex-row gap-2">
+                    <div className="mt-4 flex flex-col sm:flex-row gap-4 justify-center">
                         <MotionWrapperDelay
                             initial="hidden"
                             whileInView="visible"
                             viewport={{ once: true, amount: 0.5 }}
                             transition={{ duration: 0.5, delay: 0.4 }}
                             variants={{
-                                hidden: { opacity: 0, y: 100 },
-                                visible: { opacity: 1, y: 0 },
+                                hidden: { opacity: 0, x: 100 },
+                                visible: { opacity: 1, x: 0 },
+                            }}
+                        >
+                            <button
+                                onClick={handleDownload}
+                                className="w-full sm:w-[240px] bg-gradient-to-r from-purple-600 to-indigo-600 text-white py-3 px-6 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 shadow-md hover:shadow-lg font-medium"
+                            >
+                                Download Card
+                            </button>
+                        </MotionWrapperDelay>
+                        <MotionWrapperDelay
+                            initial="hidden"
+                            whileInView="visible"
+                            viewport={{ once: true, amount: 0.5 }}
+                            transition={{ duration: 0.5, delay: 0.4 }}
+                            variants={{
+                                hidden: { opacity: 0, x: -100 },
+                                visible: { opacity: 1, x: 0 },
                             }}
                         >     <button
-                            onClick={handleDownload}
-                            className="w-full bg-gray-800 text-white py-2 sm:py-3 rounded-lg hover:bg-gray-900 transition"
+                            onClick={() => router.push('/')}
+                            className="w-full sm:w-[240px] bg-gradient-to-r from-purple-900 to-teal-400 text-white py-3 px-6 rounded-lg hover:from-purple-700 hover:to-indigo-700 transition-all duration-300 shadow-md hover:shadow-lg font-medium"
                         >
-                                Download Card
+                                Back to Editor
                             </button></MotionWrapperDelay>
 
-                        <button
-                            onClick={() => router.push('/')}
-                            className="w-full bg-gray-200 text-gray-800 py-2 sm:py-3 rounded-lg hover:bg-gray-300 transition"
-                        >
-                            Back to Editor
-                        </button>
                     </div>
                 </div>
             </main>
