@@ -124,16 +124,19 @@ export async function POST(request) {
     const imageBuffer = Buffer.from(await imageFile.arrayBuffer());
     const panelWidth = 525;
     const canvasWidth = 1050;
-    let canvasHeight = 744;
+    const baseHeight = 744; // Base height for both sides
 
-    let sharpImage = sharp(imageBuffer);
-    let metadata = await sharpImage.metadata();
+    // Get image metadata first
+    let metadata = await sharp(imageBuffer).metadata();
 
+    // Calculate text dimensions first to determine final height
+    let finalHeight = baseHeight;
+    let totalTextHeight = baseHeight; // Initialize with base height
     if (poem || greeting) {
       const padding = 60;
       const fontSize = Math.max(10, Math.min(poemFontSize, 60));
       const greetingFontSize = fontSize * 1.2;
-      const approxCharWidth = fontSize * 0.6;
+      const approxCharWidth = fontSize * 0.65;
       const maxCharsPerLine = Math.floor(
         (panelWidth - padding * 2) / approxCharWidth
       );
@@ -149,19 +152,51 @@ export async function POST(request) {
         greetingLines.length > 0
           ? padding + greetingHeight + greetingFontSize
           : padding;
-      const totalTextHeight = poemY + poemHeight + padding;
+      totalTextHeight = poemY + poemHeight + padding;
 
-      canvasHeight = Math.ceil(Math.max(744, totalTextHeight));
+      // Update final height to match text height if it's taller
+      finalHeight = Math.max(baseHeight, Math.ceil(totalTextHeight));
     }
 
-    sharpImage = sharpImage.resize({
-      width: panelWidth,
-      height: canvasHeight,
-      fit: "cover",
-      position: "center",
-    });
+    // Calculate dimensions to match preview's object-contain behavior
+    const imageAspectRatio = metadata.width / metadata.height;
+    const containerAspectRatio = panelWidth / finalHeight;
 
-    let mainImageBuffer = await sharpImage.toBuffer();
+    // Resize image to fill the entire space while preserving borders
+    const resizedImage = await sharp(imageBuffer)
+      .resize({
+        width: panelWidth,
+        height: finalHeight,
+        fit: "fill",
+        position: "center",
+      })
+      .toBuffer();
+
+    // Create a white background canvas for image side
+    const imageBackgroundBuffer = await sharp({
+      create: {
+        width: panelWidth,
+        height: finalHeight,
+        channels: 4,
+        background: { r: 255, g: 255, b: 255, alpha: 1 },
+      },
+    })
+      .png()
+      .toBuffer();
+
+    // Composite the resized image onto the white background
+    let mainImageBuffer = await sharp(imageBackgroundBuffer)
+      .composite([
+        {
+          input: resizedImage,
+          top: 0,
+          left: 0,
+          blend: "over",
+        },
+      ])
+      .png()
+      .toBuffer();
+
     metadata = await sharp(mainImageBuffer).metadata();
 
     let compositeOperations = [];
@@ -180,11 +215,11 @@ export async function POST(request) {
 
       if (
         targetOverlayWidth > panelWidth ||
-        targetOverlayHeight > canvasHeight
+        targetOverlayHeight > finalHeight
       ) {
         const scale = Math.min(
           panelWidth / targetOverlayWidth,
-          canvasHeight / targetOverlayHeight
+          finalHeight / targetOverlayHeight
         );
         targetOverlayWidth = Math.round(targetOverlayWidth * scale);
         targetOverlayHeight = Math.round(targetOverlayHeight * scale);
@@ -227,7 +262,7 @@ export async function POST(request) {
         input: overlayResized,
         top: Math.max(
           0,
-          Math.min(finalTop, canvasHeight - overlayMetadataResized.height)
+          Math.min(finalTop, finalHeight - overlayMetadataResized.height)
         ),
         left: Math.max(
           0,
@@ -246,16 +281,15 @@ export async function POST(request) {
 
     if (borderWidth > 0) {
       const borderSvg = `
-        <svg width="${panelWidth}" height="${canvasHeight}">
+        <svg width="${panelWidth}" height="${finalHeight}">
           <rect
             x="${borderWidth / 2}"
             y="${borderWidth / 2}"
             width="${panelWidth - borderWidth}"
-            height="${canvasHeight - borderWidth}"
+            height="${finalHeight - borderWidth}"
             fill="none"
             stroke="${borderColor}"
-            stroke-width="${borderWidth}"
-            stroke-dasharray="${
+            stroke-width="${
               borderType === "dashed"
                 ? "10,5"
                 : borderType === "dotted"
@@ -298,74 +332,77 @@ export async function POST(request) {
         greetingLines.length > 0
           ? padding + greetingLines.length * lineHeight + greetingFontSize
           : padding;
+      const totalTextHeight = poemY + poemLines.length * lineHeight + padding;
 
+      // Create text SVG with proper height
       const textSvg = `
-        <svg width="${panelWidth}" height="${canvasHeight}">
-          <style>
-            @font-face {
-              font-family: 'OpenSans';
-              src: url('file://${fontFile}') format('truetype');
-            }
-          </style>
-          <rect x="0" y="0" width="${panelWidth}" height="${canvasHeight}" fill="#f9f9f9"/>
-          ${
-            greetingLines.length > 0
-              ? `
-            <text
-              x="${panelWidth / 2}"
-              y="${greetingY}"
-              font-family="'OpenSans', sans-serif"
-              font-size="${greetingFontSize}"
-              font-weight="bold"
-              fill="${grayscale > 0 ? "#000000" : poemColor}"
-              text-anchor="middle"
-              dominant-baseline="hanging"
-            >
-              ${greetingLines
-                .map(
-                  (line, index) =>
-                    `<tspan x="${panelWidth / 2}" dy="${
-                      index === 0 ? 0 : lineHeight
-                    }">${escapeXml(line)}</tspan>`
-                )
-                .join("")}
-            </text>
-          `
-              : ""
-          }
-          ${
-            poemLines.length > 0
-              ? `
-            <text
-              x="${panelWidth / 2}"
-              y="${poemY}"
-              font-family="'OpenSans', sans-serif"
-              font-size="${fontSize}"
-              fill="${grayscale > 0 ? "#000000" : poemColor}"
-              text-anchor="middle"
-              dominant-baseline="hanging"
-            >
-              ${poemLines
-                .map(
-                  (line, index) =>
-                    `<tspan x="${panelWidth / 2}" dy="${
-                      index === 0 ? 0 : lineHeight
-                    }">${escapeXml(line)}</tspan>`
-                )
-                .join("")}
-            </text>
-          `
-              : ""
-          }
-        </svg>
-      `;
+            <svg width="${panelWidth}" height="${totalTextHeight}">
+                <style>
+                    @font-face {
+                        font-family: 'OpenSans';
+                        src: url('file://${fontFile}') format('truetype');
+                    }
+                </style>
+                <rect x="0" y="0" width="${panelWidth}" height="${totalTextHeight}" fill="#ffffff"/>
+                ${
+                  greetingLines.length > 0
+                    ? `
+                    <text
+                        x="${panelWidth / 2}"
+                        y="${greetingY}"
+                        font-family="'OpenSans', sans-serif"
+                        font-size="${greetingFontSize}"
+                        font-weight="bold"
+                        fill="${grayscale > 0 ? "#000000" : poemColor}"
+                        text-anchor="middle"
+                        dominant-baseline="hanging"
+                    >
+                        ${greetingLines
+                          .map(
+                            (line, index) =>
+                              `<tspan x="${panelWidth / 2}" dy="${
+                                index === 0 ? 0 : lineHeight
+                              }">${escapeXml(line)}</tspan>`
+                          )
+                          .join("")}
+                    </text>
+                `
+                    : ""
+                }
+                ${
+                  poemLines.length > 0
+                    ? `
+                    <text
+                        x="${panelWidth / 2}"
+                        y="${poemY}"
+                        font-family="'OpenSans', sans-serif"
+                        font-size="${fontSize}"
+                        fill="${grayscale > 0 ? "#000000" : poemColor}"
+                        text-anchor="middle"
+                        dominant-baseline="hanging"
+                    >
+                        ${poemLines
+                          .map(
+                            (line, index) =>
+                              `<tspan x="${panelWidth / 2}" dy="${
+                                index === 0 ? 0 : lineHeight
+                              }">${escapeXml(line)}</tspan>`
+                          )
+                          .join("")}
+                    </text>
+                `
+                    : ""
+                }
+            </svg>
+        `;
       textBuffer = Buffer.from(textSvg);
     }
 
+    // Create final canvas with proper heights for both sides
     const finalBuffer = await sharp({
       create: {
         width: canvasWidth,
-        height: canvasHeight,
+        height: Math.max(finalHeight, totalTextHeight),
         channels: 4,
         background: { r: 255, g: 255, b: 255, alpha: 1 },
       },
