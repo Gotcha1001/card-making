@@ -1013,7 +1013,8 @@ export async function OPTIONS() {
 
 export async function POST(request) {
   try {
-    const fontConfigPath = "/var/task/.next/static/fonts";
+    const fontConfigPath = path.join(process.cwd(), "public/fonts");
+
     const fontConfigFile = path.join(fontConfigPath, "fonts.conf");
     process.env.FONTCONFIG_PATH = fontConfigPath;
     process.env.FONTCONFIG_FILE = fontConfigFile;
